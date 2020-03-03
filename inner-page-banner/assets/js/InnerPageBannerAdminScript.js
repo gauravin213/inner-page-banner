@@ -1,0 +1,4 @@
+/*
+* InnerPageBannerAdminScript
+*/ 
+

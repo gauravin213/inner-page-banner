@@ -1,0 +1,401 @@
+<?php
+/*
+Plugin Name: Custom Inner Page Banner
+Description: This is the InnerPageBanner plugin
+Author: Dev
+*/
+
+//prefix: InnerPageBanner
+
+defined( 'ABSPATH' ) or die();
+
+define( 'InnerPageBanner_VERSION', '1.0.0' );
+define( 'InnerPageBanner_URL', plugin_dir_url( __FILE__ ) );
+define( 'InnerPageBanner_PATH', plugin_dir_path( __FILE__ ) );
+
+if (!class_exists('InnerPageBanner')) {
+
+  class InnerPageBanner {
+    
+    function __construct(){  
+      
+      add_action('init', array($this, 'InnerPageBanner_register_post_type_fun'), 10);
+
+      add_action('add_meta_boxes', array($this, 'TmmLedger_meta_boxes'), 10);
+
+      add_action('save_post', array($this, 'InnerPageBanner_save_post'), 10, 1);
+
+      add_shortcode('InnerPageBannerFrontEndShortcode', array($this, 'InnerPageBannerFrontEndShortcodeFun') );
+
+    }
+
+    public function InnerPageBanner_register_post_type_fun(){
+
+      $labels = array(
+          'name'               => _x( 'Banner', 'post type general name' ),
+          'singular_name'      => _x( 'Banner', 'post type singular name' ),
+          'add_new'            => _x( 'Add New', 'Banner' ),
+          'add_new_item'       => __( 'Add New Banner' ),
+          'edit_item'          => __( 'Edit Banner' ),
+          'new_item'           => __( 'New Banner Items' ),
+          'all_items'          => __( 'All Banner \'s' ),
+          'view_item'          => __( 'View Banner' ),
+          'search_items'       => __( 'Search Banner' ),
+          'not_found'          => __( 'No Banner Items found' ),
+          'not_found_in_trash' => __( 'No Banner Items found in the Trash' ),
+          'parent_item_colon'  => '',
+          'menu_name'          => 'Banner'
+      );
+      $args = array(
+          'labels'        => $labels,
+          'description'   => 'Banner specific data',
+          'public'        => false,
+          'show_ui'       => true,
+          'show_in_menu'  => true,
+          'query_var'     => true,
+          'show_in_nav_menus'   => true,
+          'show_in_admin_bar'   => true,
+          'rewrite'       => array('slug' => 'inner-page-banner'),
+          'capability_type'=> 'post',
+          'has_archive'   => true,
+          'hierarchical'  => false,
+          'menu_position' => 5,
+          'supports'            => array( 'title'),
+          'menu_icon' => 'dashicons-welcome-write-blog'
+      );
+
+      register_post_type( 'inner_page_banner', $args );
+
+
+    }
+
+    public function TmmLedger_meta_boxes(){
+
+      add_meta_box( 'InnerPageBanner', 'Inner Page Banner', array($this, 'InnerPageBannerMetabox'), 'inner_page_banner', 'normal', 'high' );
+
+
+    }
+
+
+
+    public function InnerPageBannerFrontEndShortcodeFun(){
+
+      $page_id = get_the_ID();
+
+      $InnerPageBanner_Response = InnerPageBanner_GetPageID($page_id);
+
+      if (!empty($InnerPageBanner_Response)) {
+
+        $banner_post_id = $InnerPageBanner_Response[0]->post_id;
+
+        $banner_post_status = get_post_status($banner_post_id);
+
+        if ( $banner_post_status == 'publish') {
+
+          $BannerAttachment = get_post_meta( $banner_post_id, 'InnerPageBannerImage', true );
+
+          if (!empty($BannerAttachment)) {
+
+            $image_size = 'full'; // (thumbnail, medium, large, full or custom size)
+              
+            $image_attributes_thumbnail = wp_get_attachment_image_src( $BannerAttachment, $image_size );
+
+            $banner_url = $image_attributes_thumbnail[0];
+            ?>
+            <div>
+              <img src="<?php echo $banner_url;?>">
+            </div>
+            <?php
+
+          }
+         
+        }
+
+      }
+
+    }
+
+
+    public function InnerPageBannerMetabox(){
+      global $post; 
+
+       $InnerPageBannerSelection = get_post_meta( $post->ID, 'InnerPageBannerSelection', true );
+
+       $InnerPageBannerImage = get_post_meta( $post->ID, 'InnerPageBannerImage', true );
+
+      ?>
+      <div>
+
+
+        <select name='InnerPageBannerSelection' id="InnerPageBannerSelection">
+            <option value='0'><?php _e('Select a Page', 'textdomain'); ?></option>
+            <?php $pages = get_pages(); ?>
+            <?php foreach( $pages as $page ) { ?>
+                <option value='<?php echo $page->ID; ?>' <?php selected( $InnerPageBannerSelection, $page->ID ); ?> ><?php echo $page->post_title; ?></option>
+            <?php }; ?>
+        </select>
+
+
+        <br><br>
+
+        <div>
+           <?php
+            echo $this->inner_page_baaner_image_uploader_field( 'InnerPageBannerImage', $InnerPageBannerImage );
+        ?>
+        </div>
+
+
+
+        <script type="text/javascript">
+        jQuery(function($){
+
+          jQuery('#InnerPageBannerSelection').select2({placeholder : "select me" });
+
+          //
+          jQuery(document).on('change', '#InnerPageBannerSelection', function(){
+
+            jQuery( "#publish" ).prop( "disabled", true );
+
+            var page_id = jQuery(this).find(':selected').val(); 
+
+            jQuery.ajax({
+
+                url: '<?php echo admin_url( 'admin-ajax.php');?>',
+                type: "POST",
+                data: {'action': 'InnerPageBannerSelection_action', 'page_id': page_id},
+                cache: false,
+                dataType: 'json',
+                beforeSend: function(){
+                },
+                complete: function(){
+                },
+                success: function (response) { 
+
+                  if (response['count'] == 1) {
+                    jQuery( "#publish" ).prop( "disabled", true );
+                    alert('This page alredy use for banner');
+                  }else{
+                    jQuery( "#publish" ).prop( "disabled", false );
+                  }
+
+                  //console.log(response);
+                }
+            });
+
+          });
+          //
+
+
+          // multiple select with AJAX search
+          jQuery('#InnerPageBanner_id_select2').select2({
+            ajax: {
+              url: '<?php echo admin_url( 'admin-ajax.php');?>', //"https://api.github.com/search/repositories",
+              dataType: 'json',
+              delay: 250, // delay in ms while typing when to perform a AJAX search
+              data: function (params) {
+                  return {
+                    q: params.term, // search query
+                    action: 'InnerPageBanner_action_select2' // AJAX action for admin-ajax.php
+                  };
+              },
+              processResults: function( data ) {  console.log(data);
+
+                var options = [];
+                if ( data ) {
+                
+                  // data is the array of arrays, and each of them contains ID and the Label of the option
+                    jQuery.each( data, function( index, text ) { // do not forget that "index" is just auto incremented value
+                      options.push( { id: text[0], text: text[1]  } );
+                    });
+
+
+                }
+                return {
+                  results: options
+                };
+            },
+            cache: true
+            },
+            minimumInputLength: 3, // the minimum of symbols to input before perform a search
+            width: '100%',
+            placeholder : "select me" 
+          });
+          //
+
+
+
+            /*
+             * Select/Upload image(s) event
+             */
+            jQuery('body').on('click', '.consultant_upload_image_button', function(e){
+                e.preventDefault();
+         
+                    var button = jQuery(this),
+                        custom_uploader = wp.media({
+                    title: 'Insert image',
+                    library : {
+                        // uncomment the next line if you want to attach image to the current post
+                        // uploadedTo : wp.media.view.settings.post.id, 
+                        type : 'image'
+                    },
+                    button: {
+                        text: 'Use this image' // button label text
+                    },
+                    multiple: false // for multiple image selection set to true
+                }).on('select', function() { // it also has "open" and "close" events 
+                    var attachment = custom_uploader.state().get('selection').first().toJSON();
+                    jQuery(button).removeClass('button').html('<img class="true_pre_image" src="' + attachment.url + '" style="max-width:50%;display:block;" />').next().val(attachment.id).next().show();
+                    /* if you sen multiple to true, here is some code for getting the image IDs
+                    var attachments = frame.state().get('selection'),
+                        attachment_ids = new Array(),
+                        i = 0;
+                    attachments.each(function(attachment) {
+                        attachment_ids[i] = attachment['id'];
+                        console.log( attachment );
+                        i++;
+                    });
+                    */
+                })
+                .open();
+            });
+         
+            /*
+             * Remove image event
+             */
+            jQuery('body').on('click', '.misha_remove_image_button', function(){
+                jQuery(this).hide().prev().val('').prev().addClass('button').html('Upload image');
+                return false;
+            });
+         
+        });
+        </script>
+
+      </div>
+      <?php
+    }
+
+
+
+    public function InnerPageBanner_save_post($post_id){
+
+      global $post;
+
+      if (isset( $_POST['InnerPageBannerSelection'] ) ) {
+        $sanitized = wp_filter_post_kses( $_POST['InnerPageBannerSelection'] );
+        update_post_meta( $post_id, 'InnerPageBannerSelection', $sanitized );
+      }
+
+      if (isset( $_POST['InnerPageBannerImage'] ) ) {
+        $sanitized = wp_filter_post_kses( $_POST['InnerPageBannerImage'] );
+        update_post_meta( $post_id, 'InnerPageBannerImage', $sanitized );
+      }
+
+    }
+
+
+
+    public function inner_page_baaner_image_uploader_field( $name, $value = '') {
+      $image = ' button">Upload image';
+      $image_size = 'full'; // it would be better to use thumbnail size here (150x150 or so)
+      $display = 'none'; // display state ot the "Remove image" button
+
+      if( $image_attributes = wp_get_attachment_image_src( $value, $image_size ) ) {
+          $image = '"><img src="' . $image_attributes[0] . '" style="max-width:50%;display:block;" />';
+          $display = 'inline-block';
+      }
+
+      return '
+      <div>
+          <a href="#" class="consultant_upload_image_button' . $image . '</a>
+              <input type="hidden" name="' . $name . '" id="' . $name . '" value="' . $value . '" />
+              <a href="#" class="misha_remove_image_button" style="display:inline-block;display:' . $display . '">Remove image</a>
+          </div>';
+
+    }
+
+
+
+
+
+  }
+
+}
+
+new InnerPageBanner();
+
+
+
+
+
+add_action( 'wp_ajax_InnerPageBanner_action_select2', 'InnerPageBanner_action_select2');
+add_action( 'wp_ajax_nopriv_InnerPageBanner_action_select2', 'InnerPageBanner_action_select2');
+function InnerPageBanner_action_select2(){
+  // we will pass post IDs and titles to this array
+  $return = array();
+ 
+  // you can use WP_Query, query_posts() or get_posts() here - it doesn't matter
+  $search_results = new WP_Query( array( 
+    's'=> $_GET['q'], // the search query
+     'post_type'        => 'page',
+    'post_status' => 'publish', // if you don't want drafts to be returned
+    //'ignore_sticky_posts' => 1,
+    'posts_per_page' => -1 // how much to show at once
+  ) );
+
+
+
+
+
+  if( $search_results->have_posts() ) :
+    while( $search_results->have_posts() ) : $search_results->the_post(); 
+      // shorten the title a little
+      $title = ( mb_strlen( $search_results->post->post_title ) > 50 ) ? mb_substr( $search_results->post->post_title, 0, 49 ) . '...' : $search_results->post->post_title;
+      $return[] = array( $search_results->post->ID, $title ); // array( Post ID, Post Title )
+    endwhile;
+  endif;
+  echo json_encode( $return );
+  die;
+}
+
+
+
+add_action( 'wp_ajax_InnerPageBannerSelection_action', 'InnerPageBannerSelection_action');
+add_action( 'wp_ajax_nopriv_InnerPageBannerSelection_action', 'InnerPageBannerSelection_action');
+function InnerPageBannerSelection_action(){
+
+  global $wpdb;
+
+  $page_id = $_POST['page_id'];
+
+  $count = 0;
+
+  $query =  "SELECT * FROM ".$wpdb->prefix."postmeta WHERE meta_key = 'InnerPageBannerSelection' AND meta_value=".$page_id;
+
+  $results = $wpdb->get_results( $query );
+
+  $count = sizeof($results);
+
+  $myArr = array('response' => $results, 'page_id' => $page_id, 'count' => $count);
+  $myJSON = json_encode($myArr); 
+  echo $myJSON;
+  die();
+}
+ 
+
+
+
+
+function InnerPageBanner_GetPageID($page_id){
+
+  global $wpdb;
+
+  $query =  "SELECT * FROM ".$wpdb->prefix."postmeta WHERE meta_key = 'InnerPageBannerSelection' AND meta_value = '".$page_id."'";
+
+  $results = $wpdb->get_results( $query );
+
+  return $results;
+
+}
+
+
+?>
